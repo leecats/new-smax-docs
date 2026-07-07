@@ -32,6 +32,8 @@ interface DocContentProps {
 export function DocContent({ title, content, slug, lastUpdated, pager, breadcrumbs }: DocContentProps) {
   const { copied, copy } = useCopyToClipboard()
   const { language } = useLanguage()
+  const hasContent = typeof content === 'string' && content.trim().length > 0
+  const displayContent = hasContent ? content : 'Nội dung đang được cập nhật'
   
   // Safe access to dictionary
   const t = dictionaries[language] || dictionaries['vi'] || {
@@ -40,7 +42,7 @@ export function DocContent({ title, content, slug, lastUpdated, pager, breadcrum
   }
   
   // Calculate reading time
-  const readingTime = calculateReadingTime(content || '')
+  const readingTime = hasContent ? calculateReadingTime(content) : 0
   
   // Format date
   const formatDate = (dateString: string) => {
@@ -57,7 +59,7 @@ export function DocContent({ title, content, slug, lastUpdated, pager, breadcrum
   }
   
   // Extract TOC
-  const toc = extractTOC(content || '')
+  const toc = hasContent ? extractTOC(content) : []
 
   // Track view event
   useEffect(() => {
@@ -87,7 +89,7 @@ export function DocContent({ title, content, slug, lastUpdated, pager, breadcrum
   }, [])
 
   const copyPage = () => {
-    const fullContent = `# ${title}\n\n${content}`
+    const fullContent = `# ${title}\n\n${displayContent}`
     copy(fullContent)
   }
 
@@ -136,7 +138,13 @@ export function DocContent({ title, content, slug, lastUpdated, pager, breadcrum
             </div>
           </header>
           <MobileTableOfContents toc={toc} />
-          <MarkdownRenderer content={content} />
+          {hasContent ? (
+            <MarkdownRenderer content={content} />
+          ) : (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-muted-foreground">
+              Nội dung đang được cập nhật
+            </div>
+          )}
           
           <div className="mt-8 grid gap-8 border-t pt-8 lg:grid-cols-2">
             <DocsRating slug={slug} />

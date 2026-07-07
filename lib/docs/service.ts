@@ -29,6 +29,8 @@ export interface DocTreeNode {
   children?: DocTreeNode[]
 }
 
+const EMPTY_DOCUMENT_MESSAGE = 'Nội dung đang được cập nhật'
+
 // Get collection ID based on language
 function getCollectionId(lang: 'vi' | 'en'): string {
   const id = lang === 'vi' 
@@ -288,13 +290,17 @@ export function mapOutlineDocumentToDocPage(doc: OutlineDocument, lang: string):
   // Strip leading number from slug to make URLs cleaner,
   // but keep Outline ID suffix for uniqueness.
   slug = stripLeadingNumber(slug)
+
+  const content = typeof doc.text === 'string' && doc.text.trim()
+    ? doc.text
+    : EMPTY_DOCUMENT_MESSAGE
   
   return {
     id: doc.id,
     slug: slug,
     title: doc.title,
-    description: doc.text?.substring(0, 200) || '',
-    content: doc.text || '',
+    description: content.substring(0, 200),
+    content,
     language: lang,
     path: doc.url || '',
     parent_id: doc.parentDocumentId,
