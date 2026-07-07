@@ -30,7 +30,7 @@ next-env.d.ts
 # Local Netlify folder
 .netlify
 
-# Runtime navigation cache
+# Runtime docs/navigation cache
 /data/cache/
 
 # Local AI Orchestrator

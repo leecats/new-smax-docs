@@ -1,7 +1,8 @@
 // lib/docs/service.ts
-// Service layer for fetching documentation from Outline API
+// Service layer for fetching documentation from Outline API/cache
 
-import { getOutlineDocuments, getOutlineDocument, type OutlineDocument } from '@/lib/outline'
+import { getOutlineDocument, type OutlineDocument } from '@/lib/outline'
+import { getOutlineDocsFromCacheOrRefresh } from './outline-docs-cache'
 import { stripOutlineId, stripLeadingNumber } from './utils'
 
 export interface DocPage {
@@ -45,7 +46,7 @@ async function getBreadcrumbs(doc: OutlineDocument, allDocs: OutlineDocument[], 
   while (current.parentDocumentId) {
     const parent = allDocs.find(d => d.id === current.parentDocumentId)
     if (parent) {
-      const parentPage = mapOutlineToDocPage(parent, lang)
+      const parentPage = mapOutlineDocumentToDocPage(parent, lang)
       breadcrumbs.unshift({
         title: parentPage.title,
         href: `/${lang}/${parentPage.slug}`
@@ -74,10 +75,10 @@ export async function getDocPage(slug: string, lang: "vi" | "en" = "vi"): Promis
     // But Outline doesn't enforce unique slugs across hierarchy, so last part is usually unique enough or we rely on ID.
     const lastSlugPart = normalizedSlug.split('/').pop() || normalizedSlug
     
-    // Get all documents
-    const documents = await getOutlineDocuments(collectionId, {
-      next: { revalidate: 60 } // Cache list for 60s
-    })
+    // Get all documents from local server cache. If cache is missing,
+    // it will be built once from Outline and reused for future requests.
+    const docsPayload = await getOutlineDocsFromCacheOrRefresh(lang)
+    const documents = docsPayload.documents.filter(doc => !collectionId || doc.collectionId === collectionId)
     
     // Find document by matching slug (with stripped ID) or by Outline ID
     const doc = documents.find(d => {
@@ -116,52 +117,50 @@ export async function getDocPage(slug: string, lang: "vi" | "en" = "vi"): Promis
 
     if (!doc) return null
 
-    // Fetch full document details (including text content) from Outline API
-    // The list API often omits full text content
+    // Use cached full document content. Only call Outline as a fallback if
+    // the cache was built from list data and does not contain full text yet.
     let docData = doc
-    try {
-      const fullDoc = await getOutlineDocument(doc.id, {
-        next: { revalidate: 60 } // Cache doc content for 60s
-      })
-      if (fullDoc) {
-        docData = fullDoc
-      } else {
-        console.error(`Failed to fetch full document content for ${doc.id}`)
+    if (!docData.text) {
+      try {
+        const fullDoc = await getOutlineDocument(doc.id, { cache: 'no-store' })
+        if (fullDoc) {
+          docData = fullDoc
+        } else {
+          console.error(`Failed to fetch full document content for ${doc.id}`)
+        }
+      } catch (e) {
+        console.error(`Error fetching full document for ${doc.id}:`, e)
       }
-    } catch (e) {
-      console.error(`Error fetching full document for ${doc.id}:`, e)
     }
 
     // Map to DocPage
-    const docPage = mapOutlineToDocPage(docData, lang)
+    const docPage = mapOutlineDocumentToDocPage(docData, lang)
     
     // Add breadcrumbs
     docPage.breadcrumbs = await getBreadcrumbs(doc, documents, lang)
     
     return docPage
   } catch (error) {
-    console.error('Error fetching doc page from Outline:', error)
+    console.error('Error fetching doc page from cache/Outline:', error)
     return null
   }
 }
 
-// Get all documents for a language from Outline
+// Get all documents for a language from local cache
 export async function getAllDocPages(lang: "vi" | "en" = "vi"): Promise<DocPage[]> {
   try {
     const collectionId = getCollectionId(lang)
-    const documents = await getOutlineDocuments(collectionId)
+    const payload = await getOutlineDocsFromCacheOrRefresh(lang)
+    const documents = payload.documents.filter(doc => !collectionId || doc.collectionId === collectionId)
     
-    return documents.map(doc => mapOutlineToDocPage(doc, lang))
+    return documents.map(doc => mapOutlineDocumentToDocPage(doc, lang))
   } catch (error) {
-    console.error('Error fetching all doc pages from Outline:', error)
+    console.error('Error fetching all doc pages from cache/Outline:', error)
     return []
   }
 }
 
-// Get document tree for sidebar navigation from Outline
-export async function getDocTree(lang: "vi" | "en" = "vi"): Promise<DocTreeNode[]> {
-  const pages = await getAllDocPages(lang)
-  
+export function buildDocTreeFromOutlineDocuments(pages: DocPage[]): DocTreeNode[] {
   // Build tree structure
   const rootNodes: DocTreeNode[] = []
   const nodeMap = new Map<string, DocTreeNode>()
@@ -250,6 +249,12 @@ export async function getDocTree(lang: "vi" | "en" = "vi"): Promise<DocTreeNode[
   return rootNodes
 }
 
+// Get document tree for sidebar navigation from local cache
+export async function getDocTree(lang: "vi" | "en" = "vi"): Promise<DocTreeNode[]> {
+  const pages = await getAllDocPages(lang)
+  return buildDocTreeFromOutlineDocuments(pages)
+}
+
 // Helper to generate slug from title
 function generateSlug(title: string | undefined | null): string {
   if (!title) return ''
@@ -264,7 +269,7 @@ function generateSlug(title: string | undefined | null): string {
 // Helpers moved to utils.ts
 
 // Helper to map Outline document to DocPage
-function mapOutlineToDocPage(doc: OutlineDocument, lang: string): DocPage {
+export function mapOutlineDocumentToDocPage(doc: OutlineDocument, lang: string): DocPage {
   // Get slug from url field (format: "/doc/ten-doc-ID")
   // Keep Outline's ID suffix to avoid duplicate frontend URLs.
   let slug = ''
@@ -376,7 +381,7 @@ export async function searchDocs(query: string, lang: "vi" | "en" = "vi"): Promi
     // Filter out invalid results and map
     return results
       .filter(doc => doc && doc.id && doc.title) // Only valid docs
-      .map(doc => mapOutlineToDocPage(doc, lang))
+      .map(doc => mapOutlineDocumentToDocPage(doc, lang))
   } catch (error) {
     console.error('Error searching docs:', error)
     return []

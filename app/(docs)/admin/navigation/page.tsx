@@ -13,9 +13,11 @@ type RefreshResult = {
   lang?: 'vi' | 'en'
   generatedAt?: string
   total?: number
+  documents?: number
+  navigationRoots?: number
   results?: {
-    vi?: { generatedAt: string; total: number }
-    en?: { generatedAt: string; total: number }
+    vi?: { generatedAt: string; total?: number; documents?: number; navigationRoots?: number }
+    en?: { generatedAt: string; total?: number; documents?: number; navigationRoots?: number }
   }
 }
 
@@ -56,7 +58,7 @@ export default function NavigationAdminPage() {
     setResult(null)
 
     try {
-      const nextResult = await refreshNavigation('refresh-navigation-all')
+      const nextResult = await refreshNavigation('refresh-docs-cache-all')
       setResult(nextResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Có lỗi xảy ra')
@@ -68,24 +70,28 @@ export default function NavigationAdminPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Menu tài liệu</h1>
+        <h1 className="text-3xl font-bold">Cache tài liệu</h1>
         <p className="mt-2 text-muted-foreground">
-          Cập nhật cache menu sidebar từ Outline để người dùng không phải chờ tải menu trực tiếp từ Outline mỗi lần vào web.
+          Kéo sẵn toàn bộ danh sách, nội dung tài liệu và menu sidebar từ Outline về file JSON cache trên server.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Cập nhật menu thủ công</CardTitle>
+          <CardTitle>Cập nhật cache thủ công</CardTitle>
           <CardDescription>
-            Bấm nút bên dưới sau khi bạn thay đổi cấu trúc tài liệu trong Outline. Hệ thống sẽ tạo file JSON cache trên server cho cả tiếng Việt và tiếng Anh.
+            Bấm nút bên dưới sau khi bạn thay đổi tài liệu trong Outline. Hệ thống sẽ tải trước nội dung tài liệu và menu cho cả tiếng Việt và tiếng Anh để lần đầu mở trang không phải chờ Outline.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Button onClick={handleRefreshAll} disabled={isLoading}>
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Cập nhật menu từ Outline
+            Cập nhật toàn bộ cache từ Outline
           </Button>
+
+          <p className="text-sm text-muted-foreground">
+            Lần chạy đầu có thể mất lâu vì phải tải full content từng tài liệu từ Outline. Những lần truy cập tài liệu sau đó sẽ đọc từ cache.
+          </p>
 
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -108,7 +114,10 @@ export default function NavigationAdminPage() {
                     <Badge variant="secondary">vi</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Số mục gốc: {result.results?.vi?.total ?? 0}
+                    Số tài liệu: {result.results?.vi?.documents ?? 0}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Số mục menu gốc: {result.results?.vi?.navigationRoots ?? result.results?.vi?.total ?? 0}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Cập nhật: {formatDate(result.results?.vi?.generatedAt)}
@@ -121,7 +130,10 @@ export default function NavigationAdminPage() {
                     <Badge variant="secondary">en</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Số mục gốc: {result.results?.en?.total ?? 0}
+                    Số tài liệu: {result.results?.en?.documents ?? 0}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Số mục menu gốc: {result.results?.en?.navigationRoots ?? result.results?.en?.total ?? 0}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Cập nhật: {formatDate(result.results?.en?.generatedAt)}

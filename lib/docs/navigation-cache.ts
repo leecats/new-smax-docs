@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs'
 import path from 'path'
-import { getDocTree, type DocTreeNode } from './service'
+import { getOutlineDocsFromCacheOrRefresh } from './outline-docs-cache'
+import { buildDocTreeFromOutlineDocuments, mapOutlineDocumentToDocPage, type DocTreeNode } from './service'
 
 export interface NavigationCachePayload {
   lang: 'vi' | 'en'
@@ -41,14 +42,21 @@ export async function writeNavigationCache(
     navigation,
   }
 
-  await fs.mkdir(getCacheDir(), { recursive: true })
-  await fs.writeFile(getCacheFile(lang), `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  const cacheDir = getCacheDir()
+  const cacheFile = getCacheFile(lang)
+  const tmpFile = `${cacheFile}.${process.pid}.tmp`
+
+  await fs.mkdir(cacheDir, { recursive: true })
+  await fs.writeFile(tmpFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  await fs.rename(tmpFile, cacheFile)
 
   return payload
 }
 
 export async function refreshNavigationCache(lang: 'vi' | 'en'): Promise<NavigationCachePayload> {
-  const navigation = await getDocTree(lang)
+  const docsPayload = await getOutlineDocsFromCacheOrRefresh(lang)
+  const pages = docsPayload.documents.map(doc => mapOutlineDocumentToDocPage(doc, lang))
+  const navigation = buildDocTreeFromOutlineDocuments(pages)
   return writeNavigationCache(lang, navigation)
 }
 

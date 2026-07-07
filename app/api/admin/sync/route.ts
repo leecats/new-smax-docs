@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getOutlineDocuments, getLanguageFromCollection, type OutlineDocument } from '@/lib/outline'
 import { refreshNavigationCache } from '@/lib/docs/navigation-cache'
+import { refreshAllDocsAndNavigationCache, refreshDocsAndNavigationCache } from '@/lib/docs/sync-cache'
 
 import { processDocumentForRAG } from '@/lib/embeddings'
 
@@ -34,7 +35,16 @@ export async function POST(request: NextRequest) {
       return await refreshNavigationAll()
     }
 
-    return NextResponse.json({ error: 'Invalid action. Use: sync-documents, generate-embeddings, force-chunking, refresh-navigation, or refresh-navigation-all' }, { status: 400 })
+    if (action === 'refresh-docs-cache') {
+      const lang = body.lang === 'en' ? 'en' : 'vi'
+      return await refreshDocsCache(lang)
+    }
+
+    if (action === 'refresh-docs-cache-all') {
+      return await refreshDocsCacheAll()
+    }
+
+    return NextResponse.json({ error: 'Invalid action. Use: sync-documents, generate-embeddings, force-chunking, refresh-navigation, refresh-navigation-all, refresh-docs-cache, or refresh-docs-cache-all' }, { status: 400 })
   } catch (error) {
     console.error('Admin sync error:', error)
     return NextResponse.json({
@@ -292,6 +302,29 @@ async function refreshNavigationAll() {
   })
 }
 
+async function refreshDocsCache(lang: 'vi' | 'en') {
+  const result = await refreshDocsAndNavigationCache(lang)
+
+  return NextResponse.json({
+    success: true,
+    message: `Docs and navigation cache refreshed for ${lang}`,
+    lang,
+    generatedAt: result.generatedAt,
+    documents: result.documents,
+    navigationRoots: result.navigationRoots,
+  })
+}
+
+async function refreshDocsCacheAll() {
+  const results = await refreshAllDocsAndNavigationCache()
+
+  return NextResponse.json({
+    success: true,
+    message: 'Docs and navigation cache refreshed for all languages',
+    results,
+  })
+}
+
 export async function GET() {
   // Get sync status
   try {
@@ -314,8 +347,8 @@ export async function GET() {
         withEmbedding,
         withoutEmbedding
       },
-      actions: ['sync-documents', 'generate-embeddings', 'force-chunking', 'refresh-navigation', 'refresh-navigation-all'],
-      usage: 'POST with { "action": "refresh-navigation-all" } to rebuild menu cache'
+      actions: ['sync-documents', 'generate-embeddings', 'force-chunking', 'refresh-navigation', 'refresh-navigation-all', 'refresh-docs-cache', 'refresh-docs-cache-all'],
+      usage: 'POST with { "action": "refresh-docs-cache-all" } to rebuild docs and menu cache'
     })
   } catch (error) {
     return NextResponse.json({
