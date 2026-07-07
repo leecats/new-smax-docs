@@ -104,9 +104,11 @@ export async function getDocPage(slug: string, lang: "vi" | "en" = "vi"): Promis
       return docSlug === lastSlugPart || 
         stripLeadingNumber(docSlug) === lastSlugPart || // Allow matching without leading number
         rawUrlPart === lastSlugPart ||
+        stripLeadingNumber(rawUrlPart) === lastSlugPart || // New canonical slug keeps Outline ID but removes leading number
         docSlugCleaned === lastSlugPart ||
         stripLeadingNumber(docSlugCleaned) === lastSlugPart || // Allow matching without leading number
         urlId === lastSlugPart ||
+        stripLeadingNumber(urlId) === lastSlugPart ||
         outlineId === lastSlugPart ||
         generateSlug(d.title) === lastSlugPart ||
         stripLeadingNumber(generateSlug(d.title)) === lastSlugPart // Allow matching without leading number
@@ -264,23 +266,22 @@ function generateSlug(title: string | undefined | null): string {
 // Helper to map Outline document to DocPage
 function mapOutlineToDocPage(doc: OutlineDocument, lang: string): DocPage {
   // Get slug from url field (format: "/doc/ten-doc-ID")
-  // Strip the "/doc/" prefix and the ID suffix
+  // Keep Outline's ID suffix to avoid duplicate frontend URLs.
   let slug = ''
   
   if (doc.url) {
-    // Extract from url: "/doc/1-cong-dong-ho-tro-oocCnuJP1G" -> "1-cong-dong-ho-tro"
+    // Extract from url: "/doc/1-cong-dong-ho-tro-oocCnuJP1G" -> "1-cong-dong-ho-tro-oocCnuJP1G"
     const urlParts = doc.url.split('/')
-    const lastPart = urlParts[urlParts.length - 1] // "1-cong-dong-ho-tro-oocCnuJP1G"
-    slug = stripOutlineId(lastPart) // "1-cong-dong-ho-tro"
+    slug = urlParts[urlParts.length - 1] || ''
   }
   
-  // Fallback to title-based slug if url is empty
+  // Fallback to urlId/title-based slug if url is empty
   if (!slug) {
-    slug = generateSlug(doc.title)
+    slug = doc.urlId || generateSlug(doc.title)
   }
 
-  // Strip leading number from slug to make URLs cleaner
-  // This matches the AI behavior and user request
+  // Strip leading number from slug to make URLs cleaner,
+  // but keep Outline ID suffix for uniqueness.
   slug = stripLeadingNumber(slug)
   
   return {

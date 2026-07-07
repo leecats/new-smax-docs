@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getOutlineDocuments, getLanguageFromCollection, type OutlineDocument } from '@/lib/outline'
+import { refreshNavigationCache } from '@/lib/docs/navigation-cache'
 
 import { processDocumentForRAG } from '@/lib/embeddings'
 
@@ -24,7 +25,16 @@ export async function POST(request: NextRequest) {
       return await forceChunking()
     }
 
-    return NextResponse.json({ error: 'Invalid action. Use: sync-documents, generate-embeddings, or force-chunking' }, { status: 400 })
+    if (action === 'refresh-navigation') {
+      const lang = body.lang === 'en' ? 'en' : 'vi'
+      return await refreshNavigation(lang)
+    }
+
+    if (action === 'refresh-navigation-all') {
+      return await refreshNavigationAll()
+    }
+
+    return NextResponse.json({ error: 'Invalid action. Use: sync-documents, generate-embeddings, force-chunking, refresh-navigation, or refresh-navigation-all' }, { status: 400 })
   } catch (error) {
     console.error('Admin sync error:', error)
     return NextResponse.json({
@@ -247,6 +257,41 @@ async function forceChunking() {
   })
 }
 
+async function refreshNavigation(lang: 'vi' | 'en') {
+  const payload = await refreshNavigationCache(lang)
+
+  return NextResponse.json({
+    success: true,
+    message: `Navigation menu refreshed for ${lang}`,
+    lang,
+    generatedAt: payload.generatedAt,
+    total: payload.navigation.length,
+    navigation: payload.navigation,
+  })
+}
+
+async function refreshNavigationAll() {
+  const [vi, en] = await Promise.all([
+    refreshNavigationCache('vi'),
+    refreshNavigationCache('en'),
+  ])
+
+  return NextResponse.json({
+    success: true,
+    message: 'Navigation menu refreshed for all languages',
+    results: {
+      vi: {
+        generatedAt: vi.generatedAt,
+        total: vi.navigation.length,
+      },
+      en: {
+        generatedAt: en.generatedAt,
+        total: en.navigation.length,
+      },
+    },
+  })
+}
+
 export async function GET() {
   // Get sync status
   try {
@@ -269,8 +314,8 @@ export async function GET() {
         withEmbedding,
         withoutEmbedding
       },
-      actions: ['sync-documents', 'generate-embeddings'],
-      usage: 'POST with { "action": "sync-documents" } or { "action": "generate-embeddings" }'
+      actions: ['sync-documents', 'generate-embeddings', 'force-chunking', 'refresh-navigation', 'refresh-navigation-all'],
+      usage: 'POST with { "action": "refresh-navigation-all" } to rebuild menu cache'
     })
   } catch (error) {
     return NextResponse.json({

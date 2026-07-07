@@ -43,8 +43,9 @@ export function stripLeadingNumber(slug: string): string {
 }
 
 /**
- * Helper to clean an Outline path or slug fully
- * Extracts the last part, removes ID and leading numbers
+ * Helper to clean an Outline path or slug for frontend routing.
+ * Keeps Outline's unique ID suffix to avoid duplicate document URLs,
+ * but removes the leading numeric order for cleaner links.
  */
 export function cleanOutlineSlug(path: string): string {
   if (!path) return ""
@@ -56,9 +57,8 @@ export function cleanOutlineSlug(path: string): string {
   const segments = clean.split("/")
   const lastPart = segments[segments.length - 1]
 
-  // Clean ID and leading numbers
-  const withoutId = stripOutlineId(lastPart)
-  return stripLeadingNumber(withoutId)
+  // Keep Outline ID suffix for uniqueness, only remove leading numbers
+  return stripLeadingNumber(lastPart)
 }
 
 // Strip markdown syntax and HTML from text

@@ -52,6 +52,10 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
+# Writable runtime cache for generated navigation JSON files
+RUN mkdir -p data/cache
+RUN chown -R nextjs:nodejs data
+
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
